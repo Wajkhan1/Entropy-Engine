@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         SONAR_SERVER = 'SonarQube'
-        APP_NAME     = 'password-checker'
+        APP_NAME     = 'Entropy-Engine'
         PORT         = '8000'
     }
 
