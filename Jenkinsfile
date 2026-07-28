@@ -15,21 +15,22 @@ pipeline {
         }
 
         stage('SonarQube Code Analysis') {
-            steps {
-                withSonarQubeEnv("${SONAR_SERVER}") {
-                    script {
-                        def scannerHome = tool 'SonarQubeScanner'
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=${APP_NAME} \
-                            -Dsonar.projectName="${APP_NAME}" \
-                            -Dsonar.sources=. \
-                            -Dsonar.exclusions=**/venv/**,**/.venv/**
-                        """
-                    }
-                }
+    steps {
+        withSonarQubeEnv('SonarQube') {
+            script {
+                def scannerHome = tool 'SonarQubeScanner'
+                sh """
+                    ${scannerHome}/bin/sonar-scanner \\
+                    -Dsonar.projectKey=Entropy-Engine \\
+                    -Dsonar.projectName=Entropy-Engine \\
+                    -Dsonar.sources=. \\
+                    -Dsonar.exclusions=**/venv/**,**/.venv/**,**/__pycache__/**,**/*.pyc \\
+                    -Dsonar.javascript.exclusions=**/*
+                """
             }
         }
+    }
+}
 
         stage('Quality Gate') {
             steps {
