@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Entropy Engine</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f172a, #020617);
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .section {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        input, select {
+            padding: 12px;
+            margin: 10px;
+            width: 320px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: none;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: #22c55e;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background: #16a34a;
+        }
+
+        .result-box {
+            background: #1e293b;
+            padding: 25px;
+            margin-top: 20px;
+            width: 420px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(34,197,94,0.3);
+        }
+
+        .scroll-btn {
+            position: absolute;
+            bottom: 20px;
+            cursor: pointer;
+            font-size: 22px;
+            opacity: 0.7;
+        }
+
+        .scroll-btn:hover {
+            opacity: 1;
+        }
+
+        .copy-btn {
+            background: #3b82f6;
+            margin-top: 10px;
+        }
+
+        .copy-btn:hover {
+            background: #2563eb;
+        }
+
+    </style>
+</head>
+<body>
+
+<!-- SLIDE 1 -->
+<div class="section" id="slide1">
+    <h1>Entropy Engine</h1>
+    <p>Analyze how long it would take to crack your password</p>
+    <div class="scroll-btn" onclick="scrollToSlide(2)">⬇</div>
+</div>
+
+<!-- SLIDE 2 -->
+<div class="section" id="slide2">
+    <h2>Check Your Password Strength</h2>
+
+    <input type="text" id="password" placeholder="Enter your password">
+
+    <select id="algorithm">
+        <option value="bcrypt">bcrypt</option>
+        <option value="sha256">sha256</option>
+        <option value="md5">md5</option>
+    </select>
+
+    <button onclick="analyze()">Analyze</button>
+
+    <div class="scroll-btn" onclick="scrollToSlide(3)">⬇</div>
+</div>
+
+<!-- SLIDE 3 -->
+<div class="section" id="slide3">
+    <h2>Results</h2>
+
+    <div class="result-box" id="results">
+        Waiting for analysis...
+    </div>
+</div>
+
+<script>
+
+function scrollToSlide(num) {
+    document.getElementById("slide" + num).scrollIntoView({
+        behavior: "smooth"
+    });
+}
+
+async function analyze() {
+
+    const password = document.getElementById("password").value;
+    const algorithm = document.getElementById("algorithm").value;
+
+    if (!password) {
+        alert("Please enter a password.");
+        return;
+    }
+
+    const response = await fetch("http://127.0.0.1:8000/analyze", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            password: password,
+            algorithm: algorithm
+        })
+    });
+
+    const data = await response.json();
+
+    // Strength Color Logic
+    let strengthColor;
+    if (data.strength === "Weak") strengthColor = "red";
+    else if (data.strength === "Medium") strengthColor = "orange";
+    else if (data.strength === "Strong") strengthColor = "lightgreen";
+    else strengthColor = "lime";
+
+    document.getElementById("results").innerHTML = `
+        <p><strong>Strength:</strong>
+            <span style="color:${strengthColor}">
+                ${data.strength}
+            </span>
+        </p>
+
+        <p><strong>Entropy:</strong> ${data.entropy_bits} bits</p>
+
+        <p><strong>Estimated Crack Time:</strong>
+            ${data.estimated_crack_time.years} years
+        </p>
+
+        <p><strong>Suggested Secure Password:</strong></p>
+        <p id="securePass">${data.secure_password}</p>
+
+        <button class="copy-btn" onclick="copyPassword()">
+            Copy Suggested Password
+        </button>
+    `;
+
+    scrollToSlide(3);
+}
+
+function copyPassword() {
+    const text = document.getElementById("securePass").innerText;
+    navigator.clipboard.writeText(text);
+    alert("Secure password copied!");
+}
+
+</script>
+
+</body>
+</html>
