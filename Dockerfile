@@ -5,12 +5,12 @@ LABEL authors="Admin"
 
 WORKDIR /app
 
-# Install GCC, Python headers, and system dependencies for PyAudio and PyQt5
+# Install GCC, Python headers, and system dependencies for PyAudio and PyQt5/OpenCV
 RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
     portaudio19-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
