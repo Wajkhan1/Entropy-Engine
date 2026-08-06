@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         SONAR_SERVER = 'SonarQube'
-        APP_NAME     = 'Entropy-Engine'
+        APP_NAME     = 'entropy-engine' // Docker image names must be strictly lowercase
         PORT         = '8000'
     }
 
@@ -14,9 +14,21 @@ pipeline {
             }
         }
 
+        stage('Trivy FS Scan') {
+            steps {
+                echo 'Scanning source code dependencies with Trivy...'
+                sh '''
+                    trivy fs \
+                      --severity HIGH,CRITICAL \
+                      --format table \
+                      --output trivy-fs-report.txt . || true
+                '''
+            }
+        }
+
         stage('SonarQube Code Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv("${SONAR_SERVER}") {
                     script {
                         def scannerHome = tool 'SonarQubeScanner'
                         sh """
@@ -43,6 +55,30 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh "docker build -t ${APP_NAME}:latest ."
+            }
+        }
+
+        stage('Grype Container Scan') {
+            steps {
+                echo 'Scanning container image with Grype...'
+                sh """
+                    grype ${APP_NAME}:latest \
+                      --fail-on critical \
+                      -o table > grype-report.txt || true
+                """
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                echo 'Scanning container image with Trivy...'
+                sh """
+                    trivy image \
+                      --severity HIGH,CRITICAL \
+                      --format table \
+                      --output trivy-image-report.txt \
+                      ${APP_NAME}:latest || true
+                """
             }
         }
 
@@ -79,6 +115,8 @@ pipeline {
 
     post {
         always {
+            // Save scan reports as Jenkins build artifacts before workspace cleanup
+            archiveArtifacts artifacts: '*.txt, zap-reports/*.html', allowEmptyArchive: true
             cleanWs()
         }
     }
