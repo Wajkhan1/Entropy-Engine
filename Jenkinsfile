@@ -61,15 +61,19 @@ pipeline {
         stage('Grype Container Scan') {
             steps {
                 echo 'Scanning container image with Grype...'
-                // Generates standard text report + JSON output for archiving
-                sh """
-                    grype ${APP_NAME}:latest \
-                      --fail-on critical \
-                      -o table > grype-report.txt || true
+                sh '''
+                    # Create directory for Grype reports
+                    mkdir -p ${WORKSPACE}/grype-reports
 
-                    grype ${APP_NAME}:latest \
-                      -o json > grype-report.json || true
-                """
+                    # Save JSON and raw text reports
+                    grype ${APP_NAME}:latest -o table > grype-report.txt || true
+                    grype ${APP_NAME}:latest -o json > ${WORKSPACE}/grype-reports/grype-report.json || true
+
+                    # Generate HTML report for Jenkins GUI sidebar
+                    echo "<html><head><title>Grype Report</title><style>body { font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 20px; } pre { white-space: pre-wrap; }</style></head><body><h2>Grype Vulnerability Report</h2><pre>" > ${WORKSPACE}/grype-reports/grype-report.html
+                    grype ${APP_NAME}:latest -o table >> ${WORKSPACE}/grype-reports/grype-report.html || true
+                    echo "</pre></body></html>" >> ${WORKSPACE}/grype-reports/grype-report.html
+                '''
             }
         }
 
@@ -93,12 +97,13 @@ pipeline {
                     docker rm ${APP_NAME} || true
                     docker run -d --name ${APP_NAME} -p ${PORT}:${PORT} ${APP_NAME}:latest
                 """
-                // Healthcheck delay: ensure app container is listening before ZAP hits it
+                // Wait for application to be live so ZAP gets valid responses
                 sh """
                     echo "Waiting for ${APP_NAME} to accept connections on port ${PORT}..."
                     until \$(curl --output /dev/null --silent --head --fail http://172.17.0.1:${PORT}); do
                         sleep 2
                     done
+                    echo "App is ready!"
                 """
             }
         }
@@ -106,10 +111,8 @@ pipeline {
         stage('OWASP ZAP DAST Scan') {
             steps {
                 script {
-                    // Create workspace directory for ZAP report output
                     sh 'mkdir -p ${WORKSPACE}/zap-reports && chmod 777 ${WORKSPACE}/zap-reports'
                     
-                    // Pull and run ZAP Docker image against the local running app
                     sh """
                         docker run --rm \\
                         -v \${WORKSPACE}/zap-reports:/zap/wrk/:rw \\
@@ -126,7 +129,7 @@ pipeline {
 
     post {
         always {
-            // 1. Publish OWASP ZAP Interactive GUI Report to Jenkins Sidebar
+            // 1. Publish OWASP ZAP Report to Jenkins Sidebar
             publishHTML([
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -137,10 +140,21 @@ pipeline {
                 reportTitles: 'OWASP ZAP DAST Results'
             ])
 
-            // 2. Save raw scan reports as build artifacts
-            archiveArtifacts artifacts: '*.txt, *.json, zap-reports/*.html', allowEmptyArchive: true
+            // 2. Publish Grype Report to Jenkins Sidebar
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'grype-reports',
+                reportFiles: 'grype-report.html',
+                reportName: 'Grype Vulnerability Report',
+                reportTitles: 'Grype Container Scan Results'
+            ])
 
-            // 3. Clean up Jenkins workspace directory
+            // 3. Save raw reports as Jenkins build artifacts
+            archiveArtifacts artifacts: '*.txt, grype-reports/*, zap-reports/*', allowEmptyArchive: true
+
+            // 4. Clean up workspace
             cleanWs()
         }
     }
