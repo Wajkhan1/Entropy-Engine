@@ -61,10 +61,14 @@ pipeline {
         stage('Grype Container Scan') {
             steps {
                 echo 'Scanning container image with Grype...'
+                // Generates standard text report + JSON output for archiving
                 sh """
                     grype ${APP_NAME}:latest \
                       --fail-on critical \
                       -o table > grype-report.txt || true
+
+                    grype ${APP_NAME}:latest \
+                      -o json > grype-report.json || true
                 """
             }
         }
@@ -88,6 +92,13 @@ pipeline {
                     docker stop ${APP_NAME} || true
                     docker rm ${APP_NAME} || true
                     docker run -d --name ${APP_NAME} -p ${PORT}:${PORT} ${APP_NAME}:latest
+                """
+                // Healthcheck delay: ensure app container is listening before ZAP hits it
+                sh """
+                    echo "Waiting for ${APP_NAME} to accept connections on port ${PORT}..."
+                    until \$(curl --output /dev/null --silent --head --fail http://172.17.0.1:${PORT}); do
+                        sleep 2
+                    done
                 """
             }
         }
@@ -115,8 +126,21 @@ pipeline {
 
     post {
         always {
-            // Save scan reports as Jenkins build artifacts before workspace cleanup
-            archiveArtifacts artifacts: '*.txt, zap-reports/*.html', allowEmptyArchive: true
+            // 1. Publish OWASP ZAP Interactive GUI Report to Jenkins Sidebar
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'zap-reports',
+                reportFiles: 'zap-report.html',
+                reportName: 'OWASP ZAP Report',
+                reportTitles: 'OWASP ZAP DAST Results'
+            ])
+
+            // 2. Save raw scan reports as build artifacts
+            archiveArtifacts artifacts: '*.txt, *.json, zap-reports/*.html', allowEmptyArchive: true
+
+            // 3. Clean up Jenkins workspace directory
             cleanWs()
         }
     }
